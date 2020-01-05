@@ -105,9 +105,9 @@ fn main() {
         },
         UserPass::Verify { user, pass } => {
             if UserAccount::verify(user, pass) {
-                pb.finish_with_message(&format!("{} password is verified", user));
+                pb.finish_with_message(&format!("{} password is verified", style(user).cyan()));
             } else {
-                pb.finish_with_message(&format!("Password {} for {} is incorrect!", pass, user));
+                pb.finish_with_message(&format!("Password {} for {} is incorrect!", style(pass).cyan(), style(user).cyan()));
             }
         },
         UserPass::IsActive { user } => {
