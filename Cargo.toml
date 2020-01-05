@@ -1,5 +1,5 @@
 [package]
-name = "userpass"
+name = "user_pass"
 version = "0.1.0"
 authors = ["d-rezzer"]
 edition = "2018"
