@@ -8,26 +8,37 @@ use rand::prelude::*;
 use rand::{self, Rng, SeedableRng, CryptoRng};
 use rand_chacha;
 use rand_chacha::ChaChaRng;
-
+use std::thread;
+use std::time::Duration;
+use indicatif::{ProgressBar, ProgressStyle};
+use console::{self, style };
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "userpass", about = "a simple tool to create and update users and passwords. Passwords are hashed and salted")]
-enum SearchAuth {
+#[structopt(name = "userpass",
+    about = "a simple tool to create and update users and passwords. Passwords are hashed and salted",
+    author="ryan lee martin",
+    after_help = "All hope is lost to all ye who enter")]
+enum UserPass {
+    ///Add a new user/password combination
+    ///
+    ///Passwords are hashed and salted with a random salt.
+    ///Unique salts are generated for every user using the
+    ///ChaCha 256bit cipher.
     Add {
         #[structopt(long = "user", short = "u")]
         user: String,
         #[structopt(long = "pass", short = "p")]
         pass: String,
-        #[structopt(long = "salt", short = "s")]
-        salt: String,
 
     },
+    ///update an existing user with a new password
     Update {
         #[structopt(long = "user", short = "u")]
         user: String,
         #[structopt(long = "pass", short = "p")]
         pass: String,
     },
+    ///checks if you've entered the correct password for user.
     Verify {
         #[structopt(long = "user", short = "u")]
         user: String,
@@ -35,18 +46,25 @@ enum SearchAuth {
         pass: String,
 
     },
+    ///checks to see if user has an active account.
     IsActive {
         #[structopt(long = "user", short = "u")]
         user: String,
     },
+    //enables a user, if disabled.
     Enable {
         #[structopt(long = "user", short = "u")]
         user: String,
     },
+    //disables a user, if enabled.
     Disable {
         #[structopt(long = "user", short = "u")]
         user: String,
     },
+    Delete {
+        #[structopt(long = "user", short = "u")]
+        user: String,
+    }
 }
 
 #[derive(Debug)]
@@ -86,6 +104,17 @@ impl UserAccount {
         true
     }
 
+    pub fn delete(name: &str) -> Result<bool, rusqlite::Error> {
+
+        if !UserAccount::exists(name).unwrap() { return Ok(false); }
+        let conn = UserAccount::get_conn().unwrap();
+        let delete_count = conn.execute(&format!("Delete from users where name=?"), params![name])?;
+
+        match delete_count {
+            0 => Ok(false),
+            _ => Ok(true)
+        }
+    }
     pub fn reset_password(name: &str, new_password: &str) -> bool {
         if !UserAccount::exists(name).unwrap() { return false; }
 
@@ -99,7 +128,7 @@ impl UserAccount {
 
     ///Takes your weak ass password then salts and hashes it into something secure.
     ///Returns a tuple containing the hash and the generated salt array.
-    pub fn hash_password(pwd: &str, salt: Option<&[u8; 32]>) -> (String, [u8; 32]) {
+    fn hash_password(pwd: &str, salt: Option<&[u8; 32]>) -> (String, [u8; 32]) {
         let salted = match salt {
             None => UserAccount::gen_salt(),
             Some(s) => *s
@@ -134,7 +163,7 @@ impl UserAccount {
             Ok(is_active)
         });
 
-        is_active.unwrap()
+        is_active.unwrap_or_else(|_| { false })
     }
 
     pub fn update_active_state(name: &str, is_active: bool) -> bool {
@@ -167,49 +196,91 @@ impl UserAccount {
 fn main() {
     env::set_var("AUTH_DB", "/media/d-rezzer/data/dev/eyemetric/sex_offender/app/auth.db");
 
-    let mut opt: SearchAuth = SearchAuth::from_args();
+    let mut opt: UserPass = UserPass::from_args();
+
+    let pb = ProgressBar::new_spinner();
+    pb.enable_steady_tick(120);
+    pb.set_style(
+        ProgressStyle::default_spinner()
+            .tick_strings(&[
+                "▹▹▹▹▹",
+                "▸▹▹▹▹",
+                "▹▸▹▹▹",
+                "▹▹▸▹▹",
+                "▹▹▹▸▹",
+                "▹▹▹▹▸",
+                "▪▪▪▪▪",
+            ])
+            .template("{spinner:.blue} {msg}"),
+
+    );
 
     match opt.borrow_mut() {
-        SearchAuth::Add { user, pass, salt } => {
-            println!("You want to add something, Cool brah");
-            let did_work = UserAccount::save(user, pass);
-            if did_work {
-                println!("Good work buddy");
+        UserPass::Add { user, pass } => {
+
+            pb.set_message("Creating account..");
+            thread::sleep(Duration::from_millis(500)); //just to make it look like something is happening.
+            if UserAccount::save(user, pass) {
+                pb.finish_with_message("Done!");
             } else {
-                println!("no mass");
+                pb.finish_with_message(&format!("{} already exists. Did you mean to use the update command?", user));
             }
-        }
-        SearchAuth::Update { user, pass } => {
-            println!("You want to update something");
-            let did_work = UserAccount::reset_password(user, pass);
-            if did_work {
-                println!("Good work buddy");
+        },
+        UserPass::Update { user, pass } => {
+
+            pb.set_message(&format!("Updating {}", user));
+
+            if UserAccount::reset_password(user, pass) {
+                pb.finish_with_message(&format!("{} password updated", style(user).cyan()));
             } else {
-                println!("no mass");
+                pb.finish_with_message(&format!("could not find {} account. Did you mean to use the add command?", style(user).green()));
             }
-        }
-        SearchAuth::Verify { user, pass } => {
-            println!("You want to verify your password brah? Noice.");
-            let did_work = UserAccount::verify(user, pass);
-            if did_work {
-                println!("Bro, noice yo verified!");
+        },
+        UserPass::Verify { user, pass } => {
+            if UserAccount::verify(user, pass) {
+                pb.finish_with_message(&format!("{} password is verified", user));
             } else {
-                println!("not cool brah, you wanna piece of me?!");
+                pb.finish_with_message(&format!("Password {} for {} is incorrect!", pass, user));
             }
-        }
-        SearchAuth::IsActive { user } => {
-            println!("You wanna be active bro?");
-            let is_active = UserAccount::is_active(user);
-            if is_active { println!("Good news! You are active"); }
-            else { println!("Bro, do you even work out?"); }
-        }
-        SearchAuth::Enable { user } => {
+        },
+        UserPass::IsActive { user } => {
+           pb.set_message("Checking active status...");
+            if UserAccount::is_active(user) {
+                pb.finish_with_message(&format!("{} IS active", user));
+            } else {
+                pb.finish_with_message(&format!("{} is NOT active", user));
+            }
+        },
+        UserPass::Enable { user } => {
+
+            pb.set_message("Enabling account...");
             UserAccount::update_active_state(user, true);
-            println!("Noice! Account enabled");
-        }
-        SearchAuth::Disable { user } => {
+            pb.finish_with_message(&format!("account for {} is enabled", user));
+        },
+        UserPass::Disable { user } => {
+            pb.set_message("Disabling account...");
             UserAccount::update_active_state(user, false);
-            println!("Sorry bro, Account disabled");
+            pb.finish_with_message(&format!("account for {} is disabled", user));
+        },
+        UserPass::Delete { user } => {
+            pb.set_message("Deleting account...");
+
+            match UserAccount::delete(user) {
+                Ok(deleted) => {
+                    if deleted {
+                        pb.finish_with_message(&format!("account for {} has been deleted.", user));
+                    }
+
+                    else {
+                        pb.finish_with_message(&format!("Could not find account for {}", user));
+                    }
+                },
+                Err(e) =>  {
+                    println!("Couldn't perform delete: {}", e);
+                }
+            }
+
+
         }
     }
 
