@@ -104,10 +104,19 @@ fn main() {
             }
         },
         UserPass::Verify { user, pass } => {
-            if UserAccount::verify(user, pass) {
-                pb.finish_with_message(&format!("{} password is verified", style(user).cyan()));
-            } else {
-                pb.finish_with_message(&format!("Password {} for {} is incorrect!", style(pass).cyan(), style(user).cyan()));
+            match UserAccount::verify(user, pass) {
+                Ok(verified) => {
+                    if verified {
+                        pb.finish_with_message(&format!("{} password is verified", style(user).cyan()));
+                    }
+                    else {
+                        pb.finish_with_message(&format!("Password {} for {} is incorrect!", style(pass).cyan(), style(user).cyan()));
+                    }
+                },
+                Err(e) => {
+                    pb.finish_with_message(&format!("Account for {} not found. Are you sure it exists?",  style(user).cyan()));
+
+                }
             }
         },
         UserPass::IsActive { user } => {

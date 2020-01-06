@@ -82,17 +82,17 @@ impl UserAccount {
 
     ///compares the provided password against the users stored password.
     ///returns true if password is correct, otherwise false.
-    pub fn verify(name: &str, pwd: &str) -> bool {
+    pub fn verify(name: &str, pwd: &str) -> Result<bool, rusqlite::Error> {
         let conn = UserAccount::get_conn().unwrap();
 
         let cur_pwd = conn.query_row("select password from users where name=?", params![name], |row| {
             let p: String = row.get(0)?;
             Ok(p)
-        });
+        })?;
 
-        println!("current {:?}", cur_pwd);
+        //println!("current {:?}", cur_pwd);
 
-        argon2::verify_encoded(&cur_pwd.unwrap(), pwd.as_bytes()).expect("Could not verify account")
+        Ok(argon2::verify_encoded(&cur_pwd, pwd.as_bytes()).expect("Could not verify account"))
     }
 
     pub fn is_active(name: &str) -> bool {
