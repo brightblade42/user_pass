@@ -11,10 +11,12 @@ pub struct UserAccount {}
 
 //struct Salt([u8;32]);
 
+static AUTH_DB: &'static str = "AUTH_DB";
 
 impl UserAccount {
     fn get_conn() -> Result<Connection, rusqlite::Error> {
-        let db_path = env::var("AUTH_DB").unwrap();
+
+        let db_path = env::var(AUTH_DB).unwrap();
         Connection::open(db_path)
     }
     pub fn exists(name: &str) -> Result<bool, rusqlite::Error> {

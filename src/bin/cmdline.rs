@@ -64,7 +64,7 @@ enum UserPass {
 
 
 fn main() {
-    env::set_var("AUTH_DB", "/media/d-rezzer/data/dev/eyemetric/sex_offender/app/auth.db");
+    //env::set_var("AUTH_DB", "/media/d-rezzer/data/dev/eyemetric/sex_offender/app/auth.db");
 
     let mut opt: UserPass = UserPass::from_args();
 
