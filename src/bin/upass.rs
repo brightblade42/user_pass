@@ -12,7 +12,7 @@ use user_pass::user_account::{UserAccount};
 #[structopt(name = "userpass",
 about = "a simple tool to create and update users and passwords. Passwords are hashed and salted",
 author="ryan lee martin",
-after_help = "All hope is lost to all ye who enter")]
+after_help = "Have a great day!")]
 enum UserPass {
     ///Add a new user/password combination
     ///
@@ -108,14 +108,12 @@ fn main() {
                 Ok(verified) => {
                     if verified {
                         pb.finish_with_message(&format!("{} password is verified", style(user).cyan()));
-                    }
-                    else {
+                    } else {
                         pb.finish_with_message(&format!("Password {} for {} is incorrect!", style(pass).cyan(), style(user).cyan()));
                     }
                 },
                 Err(e) => {
-                    pb.finish_with_message(&format!("Account for {} not found. Are you sure it exists?",  style(user).cyan()));
-
+                    pb.finish_with_message(&format!("Account for {} not found. Are you sure it exists?", style(user).cyan()));
                 }
             }
         },
