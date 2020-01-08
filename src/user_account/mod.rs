@@ -1,4 +1,3 @@
-
 use argon2::{self, Config};
 use rusqlite::{Connection, NO_PARAMS, params};
 use rand::prelude::*;
@@ -6,19 +5,35 @@ use rand::{self, Rng, SeedableRng, CryptoRng};
 use rand_chacha;
 use rand_chacha::ChaChaRng;
 use std::env;
+///Interacts with a sqlite database to manage a set of user accounts.
+///Provides simple static methods to create,delete, update users and
+/// ensure all passwords are hashed+salted.
+///
 #[derive(Debug)]
 pub struct UserAccount {}
 
 //struct Salt([u8;32]);
-
-static AUTH_DB: &'static str = "AUTH_DB";
+///Currently an environment variable called AUTH_DB containing a path to a sqlite db
+///is needed. Boo.
+pub static AUTH_DB: &'static str = "AUTH_DB";
 
 impl UserAccount {
-    fn get_conn() -> Result<Connection, rusqlite::Error> {
-
-        let db_path = env::var(AUTH_DB).unwrap();
-        Connection::open(db_path)
-    }
+    ///takes a user name, checks if it exists and returns Result<bool, Error>.
+    /// ```
+    /// use user_pass::user_account::UserAccount;
+    ///
+    /// let name = "han_solo";
+    /// match UserAccount::exists(name) {
+    ///     Ok(exists) => {
+    ///         if exists { println!("{} exists", name); }
+    ///         else  { println!("{} does NOT exist", name); }
+    ///     },
+    ///     Err(e) => {
+    ///         println!("There was a problem accessing the data: {:?}",e);
+    ///     }
+    /// }
+    ///
+    /// ```
     pub fn exists(name: &str) -> Result<bool, rusqlite::Error> {
         let conn = UserAccount::get_conn()?;
 
@@ -34,6 +49,28 @@ impl UserAccount {
         }
     }
 
+    ///takes a name and password (plain text), hashes and salts the password
+    /// and saves them to the db.
+    /// User names must be unique.
+    /// Passwords are never saved in plain text and can't be recovered.
+    ///
+    /// Returns true if save was successful, false if user already exists.
+    /// ```
+    /// use user_pass::user_account::UserAccount;
+    ///
+    /// let name = "han_solo";
+    /// let pwd = "chewy";
+    /// let is_saved = UserAccount::save(name, pwd);
+    /// if is_saved {
+    ///     println!("{} was saved.", name);
+    ///
+    ///     assert!(is_saved);
+    /// }
+    /// else {
+    ///     println!("{} was saved.", name);
+    ///     assert!(!is_saved);
+    /// }
+    /// ```
     pub fn save(name: &str, password: &str) -> bool {
         if UserAccount::exists(name).unwrap() { return false; }
 
@@ -45,6 +82,21 @@ impl UserAccount {
         true
     }
 
+    ///takes a name and deletes the account if it exists.
+    /// returns true if account was deleted and false if account doesn't exist
+    /// ```
+    /// use user_pass::user_account::UserAccount;
+    ///
+    /// let name = "han_solo";
+    /// let is_deleted = UserAccount::delete(name).expect("could not delete account");
+    /// if is_deleted {
+    ///     assert!(is_deleted);
+    /// } else {
+    ///     assert!(!is_deleted);
+    /// }
+    ///
+    /// ```
+    ///
     pub fn delete(name: &str) -> Result<bool, rusqlite::Error> {
 
         if !UserAccount::exists(name).unwrap() { return Ok(false); }
@@ -56,6 +108,21 @@ impl UserAccount {
             _ => Ok(true)
         }
     }
+    ///takes an existing user name and resets its password with the new one.
+    ///returns true if succeeded, false if account doesn't exist in which case
+    ///there's nothing update and you should use save.
+    /// ```
+    /// use user_pass::user_account::UserAccount;
+    ///
+    /// let name = "han_solo";
+    /// let password = "chewbacca";
+    /// let is_reset = UserAccount::reset_password(name, password);
+    /// if is_reset {
+    ///     assert!(is_reset);
+    /// } else {
+    ///     assert!(!is_reset);
+    /// }
+    ///
     pub fn reset_password(name: &str, new_password: &str) -> bool {
         if !UserAccount::exists(name).unwrap() { return false; }
 
@@ -67,7 +134,80 @@ impl UserAccount {
         true
     }
 
-    ///Takes your weak ass password then salts and hashes it into something secure.
+
+    ///compares the provided password against the users stored hashed password.
+    ///returns true if password is correct, otherwise false.
+    /// ```
+    /// use user_pass::user_account::UserAccount;
+    ///
+    /// let name = "han_solo";
+    /// let password = "chewbacca";
+    ///
+    /// match UserAccount::verify(name, password) {
+    ///     Ok(is_verified) => {
+    ///         println!("Account is verified");
+    ///         if is_verified {
+    ///             assert!(is_verified);
+    ///         } else {
+    ///             assert!(!is_verified);
+    ///         }
+    ///     },
+    ///     Err(e) => {
+    ///         println!("There was a problem accessing auth db: {}", e);
+    ///     }
+    /// }
+    ///
+    ///
+    /// ```
+    pub fn verify(name: &str, pwd: &str) -> Result<bool, rusqlite::Error> {
+        let conn = UserAccount::get_conn().unwrap();
+
+        let cur_pwd = conn.query_row("select password from users where name=?", params![name], |row| {
+            let p: String = row.get(0)?;
+            Ok(p)
+        })?;
+
+        //println!("current {:?}", cur_pwd);
+
+        Ok(argon2::verify_encoded(&cur_pwd, pwd.as_bytes()).expect("Could not verify account"))
+    }
+
+    ///takes a name and checks if the user is active. returns true if it is and false if it ain't.
+    /// ```
+    /// use user_pass::user_account::UserAccount;
+    ///
+    /// let name = "han_solo";
+    /// let password = "chewbacca";
+    ///
+    /// let is_active = UserAccount::is_active(name);
+    /// ```
+    pub fn is_active(name: &str) -> bool {
+        let conn = UserAccount::get_conn().unwrap();
+        let is_active = conn.query_row("Select active from users where name=?", params![name], |row| {
+            let is_active: bool = row.get(0).unwrap_or_else(|_| { false });
+            Ok(is_active)
+        });
+
+        is_active.unwrap_or_else(|_| { false })
+    }
+
+    ///takes a name and updates the account's active status. This is how you enable and disable
+    ///an account
+    pub fn update_active_state(name: &str, is_active: bool) -> bool {
+        let conn = UserAccount::get_conn().unwrap();
+        let res = conn.execute("Update users set active=? where name=?", params![is_active, name]);
+        let res = res.unwrap_or_else(|_| { 0 });
+        if res > 0 { true } else { false }
+    }
+
+    ///returns a sqlite database connection.
+    fn get_conn() -> Result<Connection, rusqlite::Error> {
+
+        let db_path = env::var(AUTH_DB).unwrap();
+        Connection::open(db_path)
+    }
+
+    ///Takes your probable weak password, salts and hashes it into something more secure.
     ///Returns a tuple containing the hash and the generated salt array.
     fn hash_password(pwd: &str, salt: Option<&[u8; 32]>) -> (String, [u8; 32]) {
         let salted = match salt {
@@ -82,40 +222,7 @@ impl UserAccount {
         (hash, salted)
     }
 
-    ///compares the provided password against the users stored password.
-    ///returns true if password is correct, otherwise false.
-    pub fn verify(name: &str, pwd: &str) -> Result<bool, rusqlite::Error> {
-        let conn = UserAccount::get_conn().unwrap();
-
-        let cur_pwd = conn.query_row("select password from users where name=?", params![name], |row| {
-            let p: String = row.get(0)?;
-            Ok(p)
-        })?;
-
-        //println!("current {:?}", cur_pwd);
-
-        Ok(argon2::verify_encoded(&cur_pwd, pwd.as_bytes()).expect("Could not verify account"))
-    }
-
-    pub fn is_active(name: &str) -> bool {
-        let conn = UserAccount::get_conn().unwrap();
-        let is_active = conn.query_row("Select active from users where name=?", params![name], |row| {
-            let is_active: bool = row.get(0).unwrap_or_else(|_| { false });
-            Ok(is_active)
-        });
-
-        is_active.unwrap_or_else(|_| { false })
-    }
-
-    pub fn update_active_state(name: &str, is_active: bool) -> bool {
-        let conn = UserAccount::get_conn().unwrap();
-        let res = conn.execute("Update users set active=? where name=?", params![is_active, name]);
-        let res = res.unwrap_or_else(|_| { 0 });
-        if res > 0 { true } else { false }
-    }
-
-
-    //generate a crytpo safe salt array
+    ///generate a salt array from a random seed.
     fn gen_salt() -> [u8; 32] {
 
         //TODO: check if this run of the mill rando is ok for generating the seed value

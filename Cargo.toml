@@ -1,8 +1,15 @@
 [package]
 name = "user_pass"
 version = "0.1.0"
-authors = ["d-rezzer"]
+authors = ["brightblade"]
 edition = "2018"
+license = "MIT"
+repository = "https://gihub.com/brightblade42/user_pass"
+description = """
+user_pass is a small library for managing user names and passwords. All passwords
+are hashed and salted using the argon2 library.
+"""
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
