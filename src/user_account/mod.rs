@@ -240,3 +240,46 @@ impl UserAccount {
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn step_through_account_process() {
+
+        UserAccount::delete("sexy_tomato");
+        let name = "sexy_tomato";
+        let pass = "grapenuts";
+
+        assert!(UserAccount::save(name, pass));
+
+        match UserAccount::exists(name) {
+            Ok(exists) => {
+
+                let is_verified = UserAccount::verify(name, pass).unwrap_or_else(|_| {
+                    panic!("could not access account to verify");
+                });
+
+                assert!(is_verified); //we just made it so it better be there.
+
+            },
+            Err(e) => {
+                panic!("The account we just made doesn't exist!");
+            }
+
+        }
+
+        assert!(UserAccount::is_active(name));
+        assert!(UserAccount::update_active_state(name, false));
+        assert!(!UserAccount::is_active(name));
+        assert!(UserAccount::update_active_state(name, true));
+        assert!(UserAccount::is_active(name));
+
+        UserAccount::delete("sexy_tomato");
+    }
+
+
+}
+
+
